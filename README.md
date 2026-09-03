@@ -89,6 +89,7 @@ The element stores a JSON array on the content item, e.g.:
 [
   {
     "id": "01ABCDEF...",
+    "driveId": "b!AbCdEf...",
     "name": "Report.pdf",
     "url": "https://contoso-my.sharepoint.com/personal/.../Report.pdf",
     "author": "Jane Doe",

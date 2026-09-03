@@ -103,7 +103,7 @@
         }
     }
 
-    async function getTokenSilent(resource) {
+    async function getTokenSilent(resource, allowPopupFallback = true) {
         if (!msalReady) throw new Error("Authentication is not ready yet.");
 
         const resourceOrigin = new URL(resource).origin;
@@ -115,6 +115,7 @@
             const r = await msalInstance.acquireTokenSilent({ scopes, account: accounts[0] });
             return r.accessToken;
         } catch (err) {
+            if (!allowPopupFallback) throw err;
             setStatus("Silent token acquisition failed for " + resourceOrigin + ", retrying with popup...");
             const r = await msalInstance.acquireTokenPopup({ scopes, account: accounts[0] });
             return r.accessToken;
@@ -256,6 +257,33 @@
         }
     }
 
+    // Fetches author/last-modified metadata for a single picked item. This is
+    // best-effort enrichment that must never block or fail the save of the
+    // file reference itself, so silent-auth failures are swallowed here
+    // rather than falling back to an interactive popup (which would fire
+    // outside a direct user gesture and get blocked or feel jarring).
+    async function enrichFileMetadata(item) {
+        let author = item.lastModifiedBy?.user?.displayName || item.createdBy?.user?.displayName;
+        let lastMod = item.lastModifiedDateTime;
+
+        if ((!author || !lastMod) && item.parentReference?.driveId) {
+            try {
+                const graphToken = await getTokenSilent(GRAPH_RESOURCE, false);
+                const url = `${GRAPH_RESOURCE}/v1.0/drives/${item.parentReference.driveId}/items/${item.id}?$select=lastModifiedBy,lastModifiedDateTime`;
+                const res = await fetch(url, { headers: { Authorization: `Bearer ${graphToken}` } });
+                if (res.ok) {
+                    const data = await res.json();
+                    author = author || data.lastModifiedBy?.user?.displayName;
+                    lastMod = lastMod || data.lastModifiedDateTime;
+                }
+            } catch (e) {
+                console.error("[SharePointPicker] Metadata fetch failed", e);
+            }
+        }
+
+        return { author: author || "Unknown", lastModified: lastMod || null };
+    }
+
     async function handlePickerCommand(port, msg) {
         const cmdData = msg.data;
         setStatus("Picker command: " + cmdData.command + " (id:" + msg.id + ")");
@@ -278,46 +306,27 @@
             const selectedItems = cmdData.items || [];
             if (selectedItems.length === 0) return;
 
-            const initialFiles = selectedItems.map((item) => ({
+            // Save the basic file reference immediately - this is the only part
+            // that actually matters to the content item. Author/last-modified
+            // metadata is enriched afterward in the background so a slow or
+            // blocked Graph call can never delay persisting the picked file.
+            const currentFiles = selectedItems.map((item) => ({
                 name: item.name,
                 url: item.webUrl || item["@content.downloadUrl"],
                 id: item.id,
+                driveId: item.parentReference?.driveId || null,
                 author: "Loading...",
                 lastModified: null,
             }));
-            renderFiles(initialFiles);
+            saveValue(currentFiles);
 
-            const finalFiles = await Promise.all(
-                selectedItems.map(async (item) => {
-                    let author = item.lastModifiedBy?.user?.displayName || item.createdBy?.user?.displayName;
-                    let lastMod = item.lastModifiedDateTime;
+            selectedItems.forEach((item, index) => {
+                enrichFileMetadata(item).then((metadata) => {
+                    currentFiles[index] = { ...currentFiles[index], ...metadata };
+                    saveValue(currentFiles);
+                });
+            });
 
-                    if ((!author || !lastMod) && item.parentReference?.driveId) {
-                        try {
-                            const graphToken = await getTokenSilent(GRAPH_RESOURCE);
-                            const url = `${GRAPH_RESOURCE}/v1.0/drives/${item.parentReference.driveId}/items/${item.id}?$select=lastModifiedBy,lastModifiedDateTime`;
-                            const res = await fetch(url, { headers: { Authorization: `Bearer ${graphToken}` } });
-                            if (res.ok) {
-                                const data = await res.json();
-                                author = author || data.lastModifiedBy?.user?.displayName;
-                                lastMod = lastMod || data.lastModifiedDateTime;
-                            }
-                        } catch (e) {
-                            console.error("[SharePointPicker] Metadata fetch failed", e);
-                        }
-                    }
-
-                    return {
-                        name: item.name,
-                        url: item.webUrl || item["@content.downloadUrl"],
-                        id: item.id,
-                        author: author || "Unknown",
-                        lastModified: lastMod || null,
-                    };
-                })
-            );
-
-            saveValue(finalFiles);
             return;
         }
 
