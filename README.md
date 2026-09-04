@@ -26,9 +26,16 @@ You need an Azure AD app registration that the element will use to sign editors 
    registrations → New registration**.
 2. Set **Redirect URI** (platform: Single-page application) to the exact URL where you will host
    `index.html`, e.g. `https://your-host.example.com/index.html`.
-3. Under **API permissions**, add the delegated Microsoft Graph permissions needed by the file
-   picker and metadata lookup — at minimum `Files.Read.All` and `Sites.Read.All` — and grant admin
-   consent for your tenant.
+3. Under **API permissions**, add:
+   - **Microsoft Graph** (delegated) — `Files.Read.All` and `Sites.Read.All`, used for the
+     author/last-modified metadata lookup after a file is picked.
+   - **SharePoint** (delegated) — `AllSites.Read` and `MyFiles.Read`. The File Picker itself
+     authenticates directly against your tenant's SharePoint resource
+     (`https://<tenant>.sharepoint.com` and `https://<tenant>-my.sharepoint.com`), which is a
+     separate API from Graph — Graph permissions alone are not enough. If "SharePoint" isn't in
+     the API picker's default list, search for it under "APIs my organization uses".
+
+   Grant admin consent for your tenant after adding both sets of permissions.
 4. Copy the **Application (client) ID** — you'll need it for the element configuration below.
 
 Consult Microsoft's [File Picker v8 authentication docs](https://learn.microsoft.com/en-us/onedrive/developer/controls/file-pickers/js-v8/authentication?view=odsp-graph-online)
@@ -100,6 +107,9 @@ The element stores a JSON array on the content item, e.g.:
 
 ## Notes for integrators
 
+- **Embedding required**: Kontent.ai always loads custom elements inside a child iframe. If
+  `index.html` is opened directly (`window === window.top`), the element shows a plain message
+  instead of the picker UI rather than trying to run standalone.
 - **Popups**: sign-in and the file picker itself both use popup windows. Editors must allow popups
   for the page the custom element is hosted on.
 - **No `alert()`/`confirm()`**: Kontent.ai renders custom elements inside a sandboxed iframe that
