@@ -83,6 +83,7 @@
         return {
             valid: true,
             clientId: cfg.clientId,
+            sharePointTenant: cfg.sharePointTenant,
             selectionMode: cfg.selectionMode === "single" ? "single" : "multiple",
             debug: !!cfg.debug,
             teamSiteOrigin,
