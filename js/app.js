@@ -20,6 +20,15 @@
         container: document.getElementById("root-container"),
     };
 
+    // Kontent.ai always embeds custom elements as a child iframe. Bail out
+    // early (before any picker/auth wiring) if this page was opened directly.
+    if (window === window.top) {
+        if (dom.container) {
+            dom.container.textContent = "This page only works embedded as a Kontent.ai custom element.";
+        }
+        return;
+    }
+
     let config = null;
     let isDisabled = false;
     let msalInstance = null;
@@ -406,7 +415,7 @@
     }
 
     CustomElement.init((element, context) => {
-        const result = validateConfig(context.config);
+        const result = validateConfig(element.config);
 
         if (!result.valid) {
             showError(
@@ -431,7 +440,7 @@
             }
         }
 
-        applyDisabledState(context.item.readOnly);
+        applyDisabledState(element.disabled);
         initMsal();
     });
 
