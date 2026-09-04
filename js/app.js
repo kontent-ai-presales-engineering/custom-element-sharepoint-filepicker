@@ -99,7 +99,7 @@
             msalInstance = new msal.PublicClientApplication({
                 auth: {
                     clientId: config.clientId,
-                    authority: "https://login.microsoftonline.com/common",
+                     authority: `https://login.microsoftonline.com/${config.sharePointTenant}.onmicrosoft.com`,
                     redirectUri: window.location.origin + window.location.pathname,
                 },
                 cache: { cacheLocation: "sessionStorage" },
